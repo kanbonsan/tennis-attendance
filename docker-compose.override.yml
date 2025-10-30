@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
@@ -14,7 +12,3 @@ services:
       - "8081:80"
     networks:
       - sail
-
-networks:
-  sail:
-    external: true
