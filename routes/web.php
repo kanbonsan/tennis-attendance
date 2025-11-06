@@ -1,12 +1,9 @@
 <?php
 
-use Inertia\Inertia;
 use Illuminate\Support\Facades\Route;
 
-//Route::get('/', function () {
-//    return view('welcome');
-//});
-
 Route::get('/', function () {
-    return Inertia::render('Home', ['name' => 'Tennis Circle']);
+    return ['Laravel' => app()->version()];
 });
+
+require __DIR__.'/auth.php';
