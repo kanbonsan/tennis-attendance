@@ -1,9 +1,10 @@
 <?php
 
+use Inertia\Inertia;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return ['Laravel' => app()->version()];
-});
+Route::get('/', fn() => Inertia::render('Home'))->name('home');
 
-require __DIR__.'/auth.php';
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('/dashboard', fn() => Inertia::render('Home'))->name('dashboard');
+});

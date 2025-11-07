@@ -1,15 +1,18 @@
 import { defineConfig } from 'vite'
 import laravel from 'laravel-vite-plugin'
-import tailwindcss from '@tailwindcss/vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 export default defineConfig({
     plugins: [
         laravel({
-            input: ['resources/css/app.css', 'resources/js/app.ts'],
+            input: ['resources/js/app.ts'],
             refresh: true,
         }),
-        tailwindcss(),
-        svelte()
+        svelte({
+            compilerOptions: {
+                compatibility: { componentApi: 4 }
+            }
+        })
     ],
 })
+
