@@ -4,9 +4,9 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use App\Models\LineGroup;
 use App\Models\LineGroupMember;
 
 class LineGroupSyncService
@@ -31,6 +31,9 @@ class LineGroupSyncService
         $start = null;
 
         do {
+            // クエリパラメーター start
+            // 継続トークンの値。レスポンスで返されるJSONオブジェクトのnextプロパティに含まれます。1回のリクエストでユーザーIDをすべて取得できない場合は、このパラメータを指定して残りの配列を取得します。
+
             $res = $this->callWithRetry("https://api.line.me/v2/bot/group/{$groupId}/members/ids", $start ? ['start' => $start] : []);
             $json = $res->json();
             $ids  = (array) ($json['memberIds'] ?? []);
@@ -38,27 +41,21 @@ class LineGroupSyncService
             // upsert
             foreach ($ids as $uid) {
 
-                LineGroupMember::updateOrCreate();
-                DB::table('line_group_members')->updateOrInsert(
+                $member = LineGroupMember::updateOrCreate(
                     ['line_group_id' => $groupId, 'user_id' => $uid],
-                    ['last_seen_at' => now(), 'updated_at' => now(), 'created_at' => now()]
+                    ['last_seen_at' => now()]
                 );
+
                 $insertedOrUpdated++;
 
                 if ($withProfiles) {
-                    $profile = $this->fetchProfile($uid);
+                    $profile = $this->fetchProfile($groupId, $uid);
                     if ($profile) {
-                        DB::table('line_group_members')->where([
-                            'line_group_id' => $groupId,
-                            'user_id'       => $uid,
-                        ])->update([
-                            'display_name' => $profile['displayName'] ?? null,
-                            'updated_at'   => now(),
-                        ]);
+                        $member->fill(['display_name' => $profile['displayName'] ?? $member->display_name])->save();
                     }
                 }
             }
-
+            // 取ってこれる上限を超えると 'next' として次の start パラメーターが返ってくる。
             $start = $json['next'] ?? null;
         } while ($start);
 
@@ -67,23 +64,26 @@ class LineGroupSyncService
             $countRes = $this->callWithRetry("https://api.line.me/v2/bot/group/{$groupId}/members/count");
             $countJson = $countRes->json();
             $memberCount = $countJson['count'] ?? null;
+            Log::info('member count', ['json' => $countJson]);
         } catch (\Throwable $e) {
             $memberCount = null;
         }
-
-        DB::table('line_groups')->where('line_group_id', $groupId)->update([
-            'member_count'   => $memberCount,
-            'last_synced_at' => now(),
-            'updated_at'     => now(),
-        ]);
+        $group = LineGroup::where('line_group_id', $groupId)->first();
+        if ($group) {
+            $group->fill([
+                'member_count' => $memberCount,
+                'last_synced_at' => now()
+            ])->save();
+        }
 
         return $insertedOrUpdated;
     }
 
-    private function fetchProfile(string $userId): ?array
+    private function fetchProfile(string $groupId, string $userId): ?array
     {
         try {
-            $res = $this->callWithRetry("https://api.line.me/v2/bot/profile/{$userId}");
+            $res = $this->callWithRetry("https://api.line.me/v2/bot/group/{$groupId}/member/{$userId}");
+            // ステータスコードが200以上300未満か判定
             return $res->successful() ? $res->json() : null;
         } catch (\Throwable $e) {
             Log::warning('profile fetch failed', ['userId' => $userId, 'err' => $e->getMessage()]);
@@ -93,6 +93,7 @@ class LineGroupSyncService
 
     private function callWithRetry(string $url, array $query = [], string $method = 'GET')
     {
+
         $tries = 0;
         $wait  = 500; // ms
         while (true) {

@@ -29,6 +29,7 @@ class LineWebHookController extends Controller
         }
 
         $payload = $request->json()->all();
+        Log::info('webhook payload', ['payload' => $payload]);
         foreach ($payload['events'] ?? [] as $e) {
 
             $source = $e['source'];
